@@ -30,7 +30,7 @@ const CONFIG = {
     DEX: {
         factory: "0x116bde235696566E0b93b081FE790AD2ad548B29",
         router: "0x315eF5D6758428f9F52693ffA9E9D5b6407BC9d6",
-        pair: "0x81a31aCB9293568e8C48ED7Ad7dDC0361401EB2F",
+        pair: "0x2920EF4942edBc6e5545629FFb2a171e8B21B6E1",
         fee: 0.005 // 0.3%
     }
 };
