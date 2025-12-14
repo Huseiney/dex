@@ -20,7 +20,7 @@ const CONFIG = {
         NUUR: {
             symbol: "NUUR",
             name: "Nuur Coin",
-            address: "0xYOUR_NUUR_TOKEN_ADDRESS", // REPLACE WITH ACTUAL
+            address: "0xba84aD4Da3DC03432Fe26e3a61A769644dA72385", // REPLACE WITH ACTUAL
             decimals: 18,
             isNative: false
         }
@@ -28,10 +28,10 @@ const CONFIG = {
     
     // DEX Contract Addresses (REPLACE WITH ACTUAL)
     DEX: {
-        factory: "0xYOUR_FACTORY_ADDRESS",
-        router: "0xYOUR_ROUTER_ADDRESS",
-        pair: "0xYOUR_SDA_NUUR_PAIR_ADDRESS",
-        fee: 0.003 // 0.3%
+        factory: "0x116bde235696566E0b93b081FE790AD2ad548B29",
+        router: "0x315eF5D6758428f9F52693ffA9E9D5b6407BC9d6",
+        pair: "0x81a31aCB9293568e8C48ED7Ad7dDC0361401EB2F",
+        fee: 0.005 // 0.3%
     }
 };
 
