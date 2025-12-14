@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuur Swap - Decentralized Exchange on Sidra Chain</title>
+    <meta name="description" content="Swap, add liquidity, and earn fees on Nuur DEX. Trade Sidra Coin (SDA), Nuur Coin (NUUR) on Sidra Chain.">
+    <meta name="keywords" content="Nuur Swap, DEX, Sidra Chain, SDA, NUUR, decentralized exchange">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <nav class="navbar">
+                <div class="logo">
+                    <div class="logo-icon">N</div>
+                    <h1>Nuur Swap</h1>
+                </div>
+                
+                <div class="nav-links">
+                    <button class="nav-btn" id="swapTabBtn">Swap</button>
+                    <button class="nav-btn" id="liquidityTabBtn">Liquidity</button>
+                    <button class="nav-btn" id="statsTabBtn">Stats</button>
+                </div>
+                
+                <div class="wallet-section">
+                    <div class="network-info" id="networkInfo">
+                        <i class="fas fa-circle"></i>
+                        <span>Sidra Chain</span>
+                    </div>
+                    
+                    <div class="theme-toggle" id="themeToggle">
+                        <i class="fas fa-moon"></i>
+                    </div>
+                    
+                    <button class="connect-wallet-btn" id="connectWalletBtn">
+                        Connect Wallet
+                    </button>
+                </div>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left Column: Swap & Liquidity -->
+            <div class="left-column">
+                <!-- Swap Interface -->
+                <div class="card active-card" id="swapCard">
+                    <div class="card-header">
+                        <h2>Swap</h2>
+                        <div class="header-actions">
+                            <button class="icon-btn" id="swapSettingsBtn" title="Settings">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="swap-interface">
+                        <!-- From Token -->
+                        <div class="token-input">
+                            <div class="token-input-header">
+                                <span class="label">From</span>
+                                <span class="balance">Balance: <span id="fromBalance">0.00</span> <span id="fromBalanceSymbol">SDA</span></span>
+                            </div>
+                            <div class="token-input-content">
+                                <input type="number" 
+                                       class="amount-input" 
+                                       id="fromAmount" 
+                                       placeholder="0.0" 
+                                       min="0" 
+                                       step="any"
+                                       oninput="handleFromAmountChange()">
+                                <div class="token-selector" id="fromTokenSelector">
+                                    <div class="token-logo" id="fromTokenLogo">S</div>
+                                    <span class="token-symbol" id="fromTokenSymbol">SDA</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Swap Direction Button -->
+                        <div class="swap-direction">
+                            <button class="swap-direction-btn" id="swapDirectionBtn" onclick="swapTokens()">
+                                <i class="fas fa-arrow-down-arrow-up"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- To Token -->
+                        <div class="token-input">
+                            <div class="token-input-header">
+                                <span class="label">To</span>
+                                <span class="balance">Balance: <span id="toBalance">0.00</span> <span id="toBalanceSymbol">NUUR</span></span>
+                            </div>
+                            <div class="token-input-content">
+                                <input type="number" 
+                                       class="amount-input" 
+                                       id="toAmount" 
+                                       placeholder="0.0" 
+                                       min="0" 
+                                       step="any"
+                                       readonly>
+                                <div class="token-selector" id="toTokenSelector">
+                                    <div class="token-logo" id="toTokenLogo">N</div>
+                                    <span class="token-symbol" id="toTokenSymbol">NUUR</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Price Info -->
+                        <div class="price-info" id="priceInfo">
+                            <span>1 SDA = 0.00 NUUR</span>
+                            <span class="price-impact" id="priceImpact">0.00% impact</span>
+                        </div>
+                        
+                        <!-- Transaction Details -->
+                        <div class="transaction-details">
+                            <div class="detail-row">
+                                <span>Minimum received</span>
+                                <span id="minReceived">0.00</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>Protocol Fee</span>
+                                <span id="protocolFee">0.00</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Swap Button -->
+                        <button class="action-btn primary-btn" id="swapBtn" onclick="executeSwap()">
+                            Connect Wallet to Swap
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Liquidity Interface -->
+                <div class="card" id="liquidityCard">
+                    <div class="card-header">
+                        <h2>Liquidity</h2>
+                        <button class="icon-btn" id="liquidityInfoBtn" title="Info">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="liquidity-interface">
+                        <!-- Pool Info -->
+                        <div class="pool-info-card">
+                            <div class="pool-header">
+                                <div class="pool-tokens">
+                                    <div class="pool-token-logo">S</div>
+                                    <div class="pool-token-logo">N</div>
+                                </div>
+                                <div class="pool-name">
+                                    <h3>SDA/NUUR Pool</h3>
+                                    <span class="pool-tvl" id="poolTVL">0 SDA</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Add Liquidity -->
+                        <div class="liquidity-section">
+                            <h3>Add Liquidity</h3>
+                            <div class="liquidity-input-group">
+                                <div class="liquidity-input">
+                                    <div class="input-header">
+                                        <span>SDA Amount</span>
+                                        <span class="balance">Balance: <span id="sdaLiquidityBalance">0.00</span> SDA</span>
+                                    </div>
+                                    <div class="input-row">
+                                        <input type="number" 
+                                               class="form-input" 
+                                               id="sdaLiquidityAmount" 
+                                               placeholder="0.0" 
+                                               min="0" 
+                                               step="any"
+                                               oninput="handleSdaLiquidityChange()">
+                                        <button class="max-btn" onclick="setMaxSdaLiquidity()">MAX</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="liquidity-input">
+                                    <div class="input-header">
+                                        <span>NUUR Amount</span>
+                                        <span class="balance">Balance: <span id="nuurLiquidityBalance">0.00</span> NUUR</span>
+                                    </div>
+                                    <div class="input-row">
+                                        <input type="number" 
+                                               class="form-input" 
+                                               id="nuurLiquidityAmount" 
+                                               placeholder="0.0" 
+                                               min="0" 
+                                               step="any"
+                                               oninput="handleNuurLiquidityChange()">
+                                        <button class="max-btn" onclick="setMaxNuurLiquidity()">MAX</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="pool-ratio">
+                                <span>Pool Ratio: </span>
+                                <span id="poolRatio">1 SDA = 0.00 NUUR</span>
+                            </div>
+                            
+                            <button class="action-btn success-btn" id="addLiquidityBtn" onclick="addLiquidity()">
+                                Add Liquidity
+                            </button>
+                        </div>
+                        
+                        <!-- Remove Liquidity -->
+                        <div class="liquidity-section">
+                            <h3>Your Liquidity Position</h3>
+                            <div class="position-stats">
+                                <div class="stat-item">
+                                    <span>Your Share</span>
+                                    <span class="stat-value" id="userPoolShare">0%</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span>Pool Tokens</span>
+                                    <span class="stat-value" id="userPoolTokens">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span>Unclaimed Fees</span>
+                                    <span class="stat-value" id="userUnclaimedFees">0 SDA</span>
+                                </div>
+                            </div>
+                            
+                            <div class="position-actions">
+                                <button class="action-btn danger-btn" id="removeLiquidityBtn" onclick="removeLiquidity()">
+                                    Remove Liquidity
+                                </button>
+                                <button class="action-btn secondary-btn" id="claimFeesBtn" onclick="claimFees()">
+                                    Claim Fees
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Column: Protocol Statistics -->
+            <div class="right-column">
+                <!-- Protocol Statistics -->
+                <div class="card stats-card">
+                    <div class="card-header">
+                        <h2>Protocol Statistics</h2>
+                        <div class="header-actions">
+                            <button class="icon-btn" id="refreshStatsBtn" onclick="loadProtocolStats()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <span class="update-time" id="lastUpdated">Updating...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-water"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="totalLiquidityStat">0 SDA</h3>
+                                <p>Total Liquidity</p>
+                                <small class="stat-change" id="liquidityChange">Loading...</small>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="volume24hStat">0 SDA</h3>
+                                <p>24h Volume</p>
+                                <small class="stat-change" id="volumeChange">Loading...</small>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-coins"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="totalFeesStat">0 SDA</h3>
+                                <p>Total Fees</p>
+                                <small class="stat-change" id="feesChange">Loading...</small>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="totalTraders">0</h3>
+                                <p>Total Traders</p>
+                                <small class="stat-change" id="tradersChange">Loading...</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pool Specific Stats -->
+                    <div class="pool-stats-section">
+                        <h3>SDA/NUUR Pool Statistics</h3>
+                        <div class="pool-stats-grid">
+                            <div class="pool-stat">
+                                <span>Pool Liquidity</span>
+                                <span id="poolLiquidityStat">0 SDA</span>
+                            </div>
+                            <div class="pool-stat">
+                                <span>24h Volume</span>
+                                <span id="poolVolumeStat">0 SDA</span>
+                            </div>
+                            <div class="pool-stat">
+                                <span>24h Fees</span>
+                                <span id="poolFeesStat">0 SDA</span>
+                            </div>
+                            <div class="pool-stat">
+                                <span>Current APR</span>
+                                <span id="poolAPRStat">0.00%</span>
+                            </div>
+                            <div class="pool-stat">
+                                <span>Reserve SDA</span>
+                                <span id="reserveSDA">0</span>
+                            </div>
+                            <div class="pool-stat">
+                                <span>Reserve NUUR</span>
+                                <span id="reserveNUUR">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Token Prices -->
+                    <div class="token-prices">
+                        <h3>Token Prices</h3>
+                        <div class="price-grid">
+                            <div class="price-item">
+                                <div class="token-info-small">
+                                    <div class="token-logo-small">S</div>
+                                    <span>SDA</span>
+                                </div>
+                                <div class="price-value" id="sdaPrice">1.0000</div>
+                            </div>
+                            <div class="price-item">
+                                <div class="token-info-small">
+                                    <div class="token-logo-small">N</div>
+                                    <span>NUUR</span>
+                                </div>
+                                <div class="price-value" id="nuurPrice">0.0000</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Transactions -->
+                <div class="card transactions-card">
+                    <div class="card-header">
+                        <h2>Recent Transactions</h2>
+                    </div>
+                    <div class="transactions-list" id="transactionsList">
+                        <div class="empty-state">
+                            <i class="fas fa-exchange-alt"></i>
+                            <p>Loading transactions...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="logo">
+                        <div class="logo-icon">N</div>
+                        <h2>Nuur Swap</h2>
+                    </div>
+                    <p class="footer-description">
+                        Decentralized Exchange on Sidra Chain.<br>
+                        Trade SDA and NUUR tokens securely.
+                    </p>
+                    <div class="blockchain-info">
+                        <div class="info-item">
+                            <i class="fas fa-cube"></i>
+                            <span>Current Block: <span id="currentBlock">0</span></span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-gas-pump"></i>
+                            <span>Gas: <span id="gasPrice">2</span> Gwei</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Links</h3>
+                    <div class="footer-links">
+                        <a href="#" id="privacyPolicyLink">Privacy Policy</a>
+                        <a href="https://ledger.sidrachain.com" target="_blank">Block Explorer</a>
+                        <a href="#" id="docsLink">Documentation</a>
+                        <a href="#" id="contactLink">Contact</a>
+                    </div>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Community</h3>
+                    <div class="social-links">
+                        <a href="https://twitter.com" target="_blank" class="social-link">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a href="https://t.me" target="_blank" class="social-link">
+                            <i class="fab fa-telegram"></i>
+                        </a>
+                        <a href="https://github.com" target="_blank" class="social-link">
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2024 Nuur Swap. Built on Sidra Chain.</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Transaction Settings</h3>
+                <button class="close-modal" onclick="closeModal('settingsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <h4>Slippage Tolerance</h4>
+                    <div class="slippage-options">
+                        <button class="slippage-option active" data-value="1">1%</button>
+                        <button class="slippage-option" data-value="3">3%</button>
+                        <button class="slippage-option" data-value="5">5%</button>
+                        <div class="custom-slippage">
+                            <input type="number" 
+                                   id="customSlippage" 
+                                   min="0.1" 
+                                   max="50" 
+                                   step="0.1"
+                                   placeholder="Custom">
+                            <span>%</span>
+                        </div>
+                    </div>
+                    <div class="slippage-warning" id="slippageWarning"></div>
+                </div>
+                
+                <div class="setting-group">
+                    <h4>Transaction Deadline</h4>
+                    <div class="deadline-input">
+                        <input type="number" 
+                               id="txDeadline" 
+                               min="1" 
+                               max="60" 
+                               value="20">
+                        <span>minutes</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn primary-btn" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Select Modal -->
+    <div class="modal" id="tokenModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select Token</h3>
+                <button class="close-modal" onclick="closeModal('tokenModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="token-search">
+                    <input type="text" 
+                           id="tokenSearch" 
+                           placeholder="Search token name or symbol">
+                </div>
+                <div class="token-list" id="tokenList">
+                    <!-- Tokens will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wallet Modal -->
+    <div class="modal" id="walletModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Connect Wallet</h3>
+                <button class="close-modal" onclick="closeModal('walletModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="wallet-options">
+                    <button class="wallet-option" onclick="connectMetaMask()">
+                        <div class="wallet-icon">
+                            <i class="fab fa-ethereum"></i>
+                        </div>
+                        <div>
+                            <h4>MetaMask</h4>
+                            <p>Connect using MetaMask</p>
+                        </div>
+                    </button>
+                    
+                    <button class="wallet-option" onclick="connectWalletConnect()">
+                        <div class="wallet-icon">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div>
+                            <h4>WalletConnect</h4>
+                            <p>Scan QR code</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <p id="loadingText">Processing Transaction...</p>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
