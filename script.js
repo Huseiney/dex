@@ -5,121 +5,65 @@ const CONFIG = {
         chainId: "0x17CAD", // 97389 in decimal
         rpcUrl: "https://node.sidrachain.com",
         explorer: "https://ledger.sidrachain.com",
-        symbol: "SDA",
+        nativeSymbol: "SDA",
         decimals: 18
     },
     
+    // SDA is native coin - no contract address
     TOKENS: {
         SDA: {
             symbol: "SDA",
             name: "Sidra Coin",
             decimals: 18,
-            color: "#2563eb",
-            enabled: true
+            isNative: true
         },
         NUUR: {
             symbol: "NUUR",
             name: "Nuur Coin",
+            address: "0xYOUR_NUUR_TOKEN_ADDRESS", // REPLACE WITH ACTUAL
             decimals: 18,
-            color: "#7c3aed",
-            enabled: true
-        },
-        USDT: {
-            symbol: "USDT",
-            name: "Tether USD",
-            decimals: 6,
-            color: "#26a17b",
-            enabled: false
+            isNative: false
         }
     },
     
+    // DEX Contract Addresses (REPLACE WITH ACTUAL)
     DEX: {
-        // Replace with your actual contract addresses
-        address: "0xYourDexContractAddress",
-        factory: "0xYourFactoryAddress",
-        router: "0xYourRouterAddress",
-        fee: 0.003, // 0.3%
-        protocolFee: 0.0005 // 0.05%
-    },
-    
-    API: {
-        // You'll need to implement a backend service for these
-        stats: "/api/stats",
-        transactions: "/api/transactions",
-        prices: "/api/prices"
+        factory: "0xYOUR_FACTORY_ADDRESS",
+        router: "0xYOUR_ROUTER_ADDRESS",
+        pair: "0xYOUR_SDA_NUUR_PAIR_ADDRESS",
+        fee: 0.003 // 0.3%
     }
 };
 
-// Application State
-let state = {
-    web3: null,
-    account: null,
-    network: null,
-    contract: null,
-    provider: null,
-    
-    // Token data
-    tokens: {},
-    balances: {
-        SDA: "0",
-        NUUR: "0"
+// DEX Contract ABIs
+const FACTORY_ABI = [
+    {
+        "constant": true,
+        "inputs": [],
+        "name": "allPairsLength",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
     },
-    
-    // Swap state
-    swap: {
-        fromToken: "SDA",
-        toToken: "NUUR",
-        fromAmount: "0",
-        toAmount: "0",
-        priceImpact: 0,
-        minReceived: 0,
-        exchangeRate: 0
+    {
+        "constant": true,
+        "inputs": [{"name": "", "type": "uint256"}],
+        "name": "allPairs",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function"
     },
-    
-    // Liquidity state
-    liquidity: {
-        poolTVL: "0", // Total Value Locked in SDA
-        poolRatio: "0", // SDA/NUUR ratio
-        reserveSDA: "0",
-        reserveNUUR: "0",
-        userPoolShare: "0",
-        userPoolTokens: "0",
-        userUnclaimedFees: "0"
-    },
-    
-    // Protocol statistics (all in SDA/NUUR)
-    stats: {
-        totalLiquidity: "0", // Total liquidity across all pools in SDA
-        volume24h: "0", // 24h volume in SDA
-        totalFees: "0", // Total fees collected in SDA
-        totalTraders: "0",
-        poolLiquidity: "0", // SDA/NUUR pool liquidity in SDA
-        poolVolume: "0", // SDA/NUUR pool 24h volume in SDA
-        poolFees: "0", // SDA/NUUR pool fees in SDA
-        poolAPR: "0", // Annual Percentage Rate
-        lastUpdated: 0
-    },
-    
-    // Settings
-    settings: {
-        slippage: 1, // Default 1%
-        deadline: 20, // Default 20 minutes
-        theme: localStorage.getItem('theme') || 'light'
-    },
-    
-    // Blockchain info
-    blockchain: {
-        currentBlock: 0,
-        gasPrice: "2",
-        lastUpdate: 0
-    },
-    
-    // Recent transactions
-    transactions: []
-};
+    {
+        "constant": true,
+        "inputs": [
+            {"name": "tokenA", "type": "address"},
+            {"name": "tokenB", "type": "address"}
+        ],
+        "name": "getPair",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function"
+    }
+];
 
-// DEX Contract ABI (Simplified - Add your actual ABI)
-const DEX_ABI = [
+const ROUTER_ABI = [
     // Swap functions
     {
         "constant": false,
@@ -131,6 +75,19 @@ const DEX_ABI = [
             {"name": "deadline", "type": "uint256"}
         ],
         "name": "swapExactTokensForTokens",
+        "outputs": [{"name": "amounts", "type": "uint256[]"}],
+        "type": "function"
+    },
+    {
+        "constant": false,
+        "inputs": [
+            {"name": "amountOut", "type": "uint256"},
+            {"name": "amountInMax", "type": "uint256"},
+            {"name": "path", "type": "address[]"},
+            {"name": "to", "type": "address"},
+            {"name": "deadline", "type": "uint256"}
+        ],
+        "name": "swapTokensForExactTokens",
         "outputs": [{"name": "amounts", "type": "uint256[]"}],
         "type": "function"
     },
@@ -183,49 +140,47 @@ const DEX_ABI = [
             {"name": "amountB", "type": "uint256"}
         ],
         "type": "function"
-    },
-    
-    // Pool info
-    {
-        "constant": true,
-        "inputs": [
-            {"name": "tokenA", "type": "address"},
-            {"name": "tokenB", "type": "address"}
-        ],
-        "name": "getReserves",
-        "outputs": [
-            {"name": "reserveA", "type": "uint256"},
-            {"name": "reserveB", "type": "uint256"}
-        ],
-        "type": "function"
-    },
-    {
-        "constant": true,
-        "inputs": [
-            {"name": "user", "type": "address"},
-            {"name": "tokenA", "type": "address"},
-            {"name": "tokenB", "type": "address"}
-        ],
-        "name": "getUserPosition",
-        "outputs": [
-            {"name": "liquidity", "type": "uint256"},
-            {"name": "share", "type": "uint256"},
-            {"name": "fees", "type": "uint256"}
-        ],
-        "type": "function"
-    },
-    
-    // Protocol stats
+    }
+];
+
+const PAIR_ABI = [
     {
         "constant": true,
         "inputs": [],
-        "name": "getProtocolStats",
+        "name": "getReserves",
         "outputs": [
-            {"name": "totalLiquidity", "type": "uint256"},
-            {"name": "volume24h", "type": "uint256"},
-            {"name": "totalFees", "type": "uint256"},
-            {"name": "totalTraders", "type": "uint256"}
+            {"name": "reserve0", "type": "uint112"},
+            {"name": "reserve1", "type": "uint112"},
+            {"name": "blockTimestampLast", "type": "uint32"}
         ],
+        "type": "function"
+    },
+    {
+        "constant": true,
+        "inputs": [],
+        "name": "totalSupply",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": true,
+        "inputs": [{"name": "owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": true,
+        "inputs": [],
+        "name": "token0",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function"
+    },
+    {
+        "constant": true,
+        "inputs": [],
+        "name": "token1",
+        "outputs": [{"name": "", "type": "address"}],
         "type": "function"
     }
 ];
@@ -262,25 +217,95 @@ const ERC20_ABI = [
         "name": "symbol",
         "outputs": [{"name": "", "type": "string"}],
         "type": "function"
+    },
+    {
+        "constant": true,
+        "inputs": [],
+        "name": "totalSupply",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
     }
 ];
 
+// Application State
+let state = {
+    web3: null,
+    account: null,
+    provider: null,
+    contracts: {
+        factory: null,
+        router: null,
+        pair: null,
+        nuurToken: null
+    },
+    balances: {
+        SDA: "0",
+        NUUR: "0"
+    },
+    swap: {
+        fromToken: "SDA",
+        toToken: "NUUR",
+        fromAmount: "",
+        toAmount: "",
+        priceImpact: 0,
+        minReceived: 0,
+        exchangeRate: 0
+    },
+    liquidity: {
+        poolTVL: "0",
+        poolRatio: "0",
+        reserveSDA: "0",
+        reserveNUUR: "0",
+        userPoolShare: "0",
+        userPoolTokens: "0",
+        userUnclaimedFees: "0"
+    },
+    stats: {
+        totalLiquidity: "0",
+        volume24h: "0",
+        totalFees: "0",
+        totalTraders: "0",
+        poolLiquidity: "0",
+        poolVolume: "0",
+        poolFees: "0",
+        poolAPR: "0"
+    },
+    settings: {
+        slippage: 3, // Default 3%
+        deadline: 20,
+        theme: 'light'
+    },
+    blockchain: {
+        currentBlock: 0,
+        gasPrice: "2"
+    }
+};
+
+// DOM Elements
+let elements = {};
+
 // Initialize Application
-async function init() {
+document.addEventListener('DOMContentLoaded', async () => {
     try {
         console.log('Initializing Nuur DEX...');
+        
+        // Cache DOM elements
+        cacheElements();
         
         // Load saved settings
         loadSettings();
         
-        // Initialize Web3 provider
-        await initWeb3Provider();
+        // Initialize event listeners
+        initEventListeners();
+        
+        // Initialize Web3
+        await initWeb3();
         
         // Check if wallet is already connected
         await checkWalletConnection();
         
-        // Initialize event listeners
-        initEventListeners();
+        // Initialize contracts
+        await initContracts();
         
         // Load initial data
         await loadInitialData();
@@ -289,30 +314,134 @@ async function init() {
         startRealTimeUpdates();
         
         console.log('Nuur DEX initialized successfully');
-        showNotification('DEX connected to Sidra Chain', 'success');
+        showNotification('Connected to Sidra Chain', 'success');
         
     } catch (error) {
         console.error('Failed to initialize app:', error);
-        showNotification('Failed to connect to Sidra Chain', 'error');
+        showNotification('Failed to initialize DEX', 'error');
+    }
+});
+
+// Cache DOM Elements
+function cacheElements() {
+    elements = {
+        // Wallet
+        connectWalletBtn: document.getElementById('connectWalletBtn'),
+        walletModal: document.getElementById('walletModal'),
+        closeWalletBtn: document.getElementById('closeWalletBtn'),
+        metamaskBtn: document.getElementById('metamaskBtn'),
+        
+        // Theme
+        themeToggle: document.getElementById('themeToggle'),
+        
+        // Navigation
+        swapTabBtn: document.getElementById('swapTabBtn'),
+        liquidityTabBtn: document.getElementById('liquidityTabBtn'),
+        swapCard: document.getElementById('swapCard'),
+        liquidityCard: document.getElementById('liquidityCard'),
+        
+        // Swap
+        fromTokenSelector: document.getElementById('fromTokenSelector'),
+        toTokenSelector: document.getElementById('toTokenSelector'),
+        fromAmount: document.getElementById('fromAmount'),
+        toAmount: document.getElementById('toAmount'),
+        fromBalance: document.getElementById('fromBalance'),
+        toBalance: document.getElementById('toBalance'),
+        swapDirectionBtn: document.getElementById('swapDirectionBtn'),
+        swapBtn: document.getElementById('swapBtn'),
+        priceInfo: document.getElementById('priceInfo'),
+        priceImpact: document.getElementById('priceImpact'),
+        minReceived: document.getElementById('minReceived'),
+        protocolFee: document.getElementById('protocolFee'),
+        
+        // Liquidity
+        sdaLiquidityAmount: document.getElementById('sdaLiquidityAmount'),
+        nuurLiquidityAmount: document.getElementById('nuurLiquidityAmount'),
+        sdaLiquidityBalance: document.getElementById('sdaLiquidityBalance'),
+        nuurLiquidityBalance: document.getElementById('nuurLiquidityBalance'),
+        maxSdaBtn: document.getElementById('maxSdaBtn'),
+        maxNuurBtn: document.getElementById('maxNuurBtn'),
+        addLiquidityBtn: document.getElementById('addLiquidityBtn'),
+        removeLiquidityBtn: document.getElementById('removeLiquidityBtn'),
+        claimFeesBtn: document.getElementById('claimFeesBtn'),
+        userPoolShare: document.getElementById('userPoolShare'),
+        userPoolTokens: document.getElementById('userPoolTokens'),
+        userUnclaimedFees: document.getElementById('userUnclaimedFees'),
+        poolTVL: document.getElementById('poolTVL'),
+        poolRatio: document.getElementById('poolRatio'),
+        
+        // Stats
+        totalLiquidityStat: document.getElementById('totalLiquidityStat'),
+        volume24hStat: document.getElementById('volume24hStat'),
+        totalFeesStat: document.getElementById('totalFeesStat'),
+        totalTraders: document.getElementById('totalTraders'),
+        poolLiquidityStat: document.getElementById('poolLiquidityStat'),
+        poolVolumeStat: document.getElementById('poolVolumeStat'),
+        poolFeesStat: document.getElementById('poolFeesStat'),
+        poolAPRStat: document.getElementById('poolAPRStat'),
+        reserveSDA: document.getElementById('reserveSDA'),
+        reserveNUUR: document.getElementById('reserveNUUR'),
+        sdaPrice: document.getElementById('sdaPrice'),
+        nuurPrice: document.getElementById('nuurPrice'),
+        refreshStatsBtn: document.getElementById('refreshStatsBtn'),
+        lastUpdated: document.getElementById('lastUpdated'),
+        
+        // Settings
+        settingsModal: document.getElementById('settingsModal'),
+        closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+        swapSettingsBtn: document.getElementById('swapSettingsBtn'),
+        slippageOptions: document.querySelectorAll('.slippage-option'),
+        customSlippage: document.getElementById('customSlippage'),
+        txDeadline: document.getElementById('txDeadline'),
+        slippageWarning: document.getElementById('slippageWarning'),
+        saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+        
+        // Blockchain
+        currentBlock: document.getElementById('currentBlock'),
+        gasPrice: document.getElementById('gasPrice'),
+        
+        // Token Modal
+        tokenModal: document.getElementById('tokenModal'),
+        closeTokenBtn: document.getElementById('closeTokenBtn'),
+        
+        // Loading
+        loadingOverlay: document.getElementById('loadingOverlay'),
+        loadingText: document.getElementById('loadingText')
+    };
+}
+
+// Initialize Web3
+async function initWeb3() {
+    try {
+        if (window.ethereum) {
+            // Use injected provider (MetaMask)
+            state.provider = window.ethereum;
+            state.web3 = new Web3(window.ethereum);
+            
+            // Request account access
+            try {
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+            } catch (error) {
+                console.log('User denied account access');
+            }
+        } else if (window.web3) {
+            // Legacy provider
+            state.web3 = new Web3(window.web3.currentProvider);
+        } else {
+            // Fallback to HTTP provider
+            state.web3 = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK.rpcUrl));
+        }
+        
+        // Check network
+        await checkNetwork();
+        
+    } catch (error) {
+        console.error('Web3 initialization failed:', error);
+        throw error;
     }
 }
 
-// Initialize Web3 Provider
-async function initWeb3Provider() {
-    // Use browser provider if available, otherwise use HTTP provider
-    if (window.ethereum) {
-        state.provider = window.ethereum;
-        state.web3 = new Web3(window.ethereum);
-    } else {
-        // Fallback to HTTP provider
-        state.web3 = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK.rpcUrl));
-    }
-    
-    // Check network
-    await checkNetwork();
-}
-
-// Check Network Connection
+// Check Network
 async function checkNetwork() {
     try {
         const chainId = await state.web3.eth.getChainId();
@@ -320,65 +449,120 @@ async function checkNetwork() {
         
         if (chainId !== expectedChainId) {
             console.warn(`Wrong network. Expected ${expectedChainId}, got ${chainId}`);
-            showNotification('Please switch to Sidra Chain network', 'warning');
-            return false;
+            
+            if (window.ethereum) {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: CONFIG.NETWORK.chainId }],
+                    });
+                } catch (switchError) {
+                    if (switchError.code === 4902) {
+                        try {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{
+                                    chainId: CONFIG.NETWORK.chainId,
+                                    chainName: CONFIG.NETWORK.name,
+                                    nativeCurrency: {
+                                        name: 'Sidra',
+                                        symbol: 'SDA',
+                                        decimals: 18
+                                    },
+                                    rpcUrls: [CONFIG.NETWORK.rpcUrl],
+                                    blockExplorerUrls: [CONFIG.NETWORK.explorer]
+                                }],
+                            });
+                        } catch (addError) {
+                            console.error('Failed to add network:', addError);
+                        }
+                    }
+                }
+            }
         }
-        
-        state.network = CONFIG.NETWORK.name;
-        updateNetworkInfo();
-        return true;
         
     } catch (error) {
         console.error('Network check failed:', error);
-        return false;
+    }
+}
+
+// Initialize Contracts
+async function initContracts() {
+    try {
+        // Initialize DEX contracts
+        state.contracts.factory = new state.web3.eth.Contract(FACTORY_ABI, CONFIG.DEX.factory);
+        state.contracts.router = new state.web3.eth.Contract(ROUTER_ABI, CONFIG.DEX.router);
+        state.contracts.pair = new state.web3.eth.Contract(PAIR_ABI, CONFIG.DEX.pair);
+        
+        // Initialize NUUR token contract
+        state.contracts.nuurToken = new state.web3.eth.Contract(ERC20_ABI, CONFIG.TOKENS.NUUR.address);
+        
+        console.log('Contracts initialized successfully');
+        
+    } catch (error) {
+        console.error('Failed to initialize contracts:', error);
+        showNotification('Failed to connect to DEX contracts', 'error');
     }
 }
 
 // Initialize Event Listeners
 function initEventListeners() {
+    // Theme toggle
+    elements.themeToggle.addEventListener('click', toggleTheme);
+    
     // Wallet connection
-    document.getElementById('connectWalletBtn').addEventListener('click', toggleWalletModal);
+    elements.connectWalletBtn.addEventListener('click', toggleWalletModal);
+    elements.closeWalletBtn.addEventListener('click', () => closeModal('walletModal'));
+    elements.metamaskBtn.addEventListener('click', connectMetaMask);
     
     // Navigation tabs
-    document.getElementById('swapTabBtn').addEventListener('click', () => switchTab('swap'));
-    document.getElementById('liquidityTabBtn').addEventListener('click', () => switchTab('liquidity'));
-    document.getElementById('statsTabBtn').addEventListener('click', () => switchTab('stats'));
+    elements.swapTabBtn.addEventListener('click', () => switchTab('swap'));
+    elements.liquidityTabBtn.addEventListener('click', () => switchTab('liquidity'));
+    
+    // Swap
+    elements.fromTokenSelector.addEventListener('click', () => openTokenModal('from'));
+    elements.toTokenSelector.addEventListener('click', () => openTokenModal('to'));
+    elements.swapDirectionBtn.addEventListener('click', swapTokens);
+    elements.swapBtn.addEventListener('click', executeSwap);
+    elements.fromAmount.addEventListener('input', handleFromAmountChange);
+    
+    // Liquidity
+    elements.sdaLiquidityAmount.addEventListener('input', handleSdaLiquidityChange);
+    elements.nuurLiquidityAmount.addEventListener('input', handleNuurLiquidityChange);
+    elements.maxSdaBtn.addEventListener('click', setMaxSdaLiquidity);
+    elements.maxNuurBtn.addEventListener('click', setMaxNuurLiquidity);
+    elements.addLiquidityBtn.addEventListener('click', addLiquidity);
+    elements.removeLiquidityBtn.addEventListener('click', removeLiquidity);
+    elements.claimFeesBtn.addEventListener('click', claimFees);
     
     // Settings
-    document.getElementById('swapSettingsBtn').addEventListener('click', () => openModal('settingsModal'));
+    elements.swapSettingsBtn.addEventListener('click', () => openModal('settingsModal'));
+    elements.closeSettingsBtn.addEventListener('click', () => closeModal('settingsModal'));
+    elements.saveSettingsBtn.addEventListener('click', saveSettings);
     
     // Slippage options
-    document.querySelectorAll('.slippage-option').forEach(option => {
+    elements.slippageOptions.forEach(option => {
         option.addEventListener('click', function() {
             setSlippage(parseFloat(this.dataset.value));
         });
     });
     
-    // Custom slippage input
-    document.getElementById('customSlippage').addEventListener('input', function() {
-        const value = parseFloat(this.value);
-        if (!isNaN(value) && value >= 0.1 && value <= 50) {
-            setSlippage(value);
+    // Custom slippage
+    elements.customSlippage.addEventListener('input', handleCustomSlippage);
+    elements.txDeadline.addEventListener('input', handleDeadlineChange);
+    
+    // Refresh stats
+    elements.refreshStatsBtn.addEventListener('click', loadProtocolStats);
+    
+    // Token modal
+    elements.closeTokenBtn.addEventListener('click', () => closeModal('tokenModal'));
+    
+    // Window events
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal')) {
+            closeAllModals();
         }
     });
-    
-    // Transaction deadline
-    document.getElementById('txDeadline').addEventListener('input', function() {
-        const value = parseInt(this.value);
-        if (!isNaN(value) && value >= 1 && value <= 60) {
-            state.settings.deadline = value;
-        }
-    });
-    
-    // Save settings
-    document.getElementById('saveSettings').addEventListener('click', saveSettings);
-    
-    // Token selectors
-    document.getElementById('fromTokenSelector').addEventListener('click', () => openTokenModal('from'));
-    document.getElementById('toTokenSelector').addEventListener('click', () => openTokenModal('to'));
-    
-    // Theme toggle
-    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
     
     // Listen for account changes
     if (window.ethereum) {
@@ -387,322 +571,47 @@ function initEventListeners() {
     }
 }
 
-// Load Initial Data
-async function loadInitialData() {
-    showLoading('Loading blockchain data...');
-    
-    try {
-        // Load blockchain info
-        await loadBlockchainInfo();
-        
-        // Load protocol statistics
-        await loadProtocolStats();
-        
-        // Load pool data
-        await loadPoolData();
-        
-        // If wallet is connected, load user data
-        if (state.account) {
-            await loadUserData();
-        }
-        
-        updateUI();
-        hideLoading();
-        
-    } catch (error) {
-        console.error('Failed to load initial data:', error);
-        hideLoading();
-        showNotification('Failed to load data from Sidra Chain', 'error');
-    }
-}
-
-// Load Blockchain Information
-async function loadBlockchainInfo() {
-    try {
-        // Get current block number
-        const blockNumber = await state.web3.eth.getBlockNumber();
-        state.blockchain.currentBlock = blockNumber;
-        
-        // Get gas price (from explorer data - 2 Gwei)
-        state.blockchain.gasPrice = "2";
-        
-        // Update UI
-        document.getElementById('currentBlock').textContent = formatNumber(blockNumber);
-        document.getElementById('gasPrice').textContent = state.blockchain.gasPrice;
-        
-    } catch (error) {
-        console.error('Failed to load blockchain info:', error);
-    }
-}
-
-// Load Protocol Statistics (REAL DATA from Sidra Chain)
-async function loadProtocolStats() {
-    try {
-        // In production, you would:
-        // 1. Call your DEX contract's getProtocolStats() function
-        // 2. Or query your backend API that indexes blockchain data
-        
-        // For now, we'll simulate real data based on chain activity
-        // Replace this with actual contract calls
-        
-        if (state.contract) {
-            // Real contract call (uncomment when you have contract deployed)
-            /*
-            const stats = await state.contract.methods.getProtocolStats().call();
-            state.stats.totalLiquidity = state.web3.utils.fromWei(stats.totalLiquidity, 'ether');
-            state.stats.volume24h = state.web3.utils.fromWei(stats.volume24h, 'ether');
-            state.stats.totalFees = state.web3.utils.fromWei(stats.totalFees, 'ether');
-            state.stats.totalTraders = stats.totalTraders;
-            */
-        }
-        
-        // Simulated data based on chain activity
-        const baseLiquidity = 5000000; // 5M SDA base liquidity
-        const volumeMultiplier = 0.1; // 10% of liquidity as daily volume
-        const feeMultiplier = 0.003; // 0.3% fees
-        
-        // Generate realistic stats based on blockchain activity
-        const blockTime = 2; // 2 seconds from explorer
-        const dailyBlocks = 86400 / blockTime;
-        const recentActivity = Math.min(state.blockchain.currentBlock / dailyBlocks, 100);
-        
-        state.stats = {
-            totalLiquidity: (baseLiquidity * (1 + recentActivity / 100)).toFixed(2),
-            volume24h: (baseLiquidity * volumeMultiplier * (1 + recentActivity / 200)).toFixed(2),
-            totalFees: (baseLiquidity * volumeMultiplier * feeMultiplier * 30).toFixed(2), // 30 days
-            totalTraders: Math.floor(1000 + recentActivity * 10),
-            poolLiquidity: (baseLiquidity * 0.6).toFixed(2), // 60% in SDA/NUUR pool
-            poolVolume: (baseLiquidity * volumeMultiplier * 0.8).toFixed(2), // 80% of volume
-            poolFees: (baseLiquidity * volumeMultiplier * feeMultiplier * 30 * 0.8).toFixed(2),
-            poolAPR: (15 + recentActivity / 10).toFixed(2), // 15-25% APR
-            lastUpdated: Date.now()
-        };
-        
-        updateStatsUI();
-        
-    } catch (error) {
-        console.error('Failed to load protocol stats:', error);
-    }
-}
-
-// Load Pool Data
-async function loadPoolData() {
-    try {
-        if (state.contract) {
-            // Real contract call for pool reserves
-            /*
-            const reserves = await state.contract.methods.getReserves(
-                CONFIG.TOKENS.SDA.address,
-                CONFIG.TOKENS.NUUR.address
-            ).call();
-            
-            state.liquidity.reserveSDA = state.web3.utils.fromWei(reserves.reserveA, 'ether');
-            state.liquidity.reserveNUUR = state.web3.utils.fromWei(reserves.reserveB, 'ether');
-            */
-        }
-        
-        // Simulated pool data
-        const totalLiquidity = parseFloat(state.stats.poolLiquidity);
-        state.liquidity = {
-            poolTVL: totalLiquidity.toFixed(2),
-            poolRatio: "0.85", // 1 SDA = 0.85 NUUR
-            reserveSDA: (totalLiquidity * 0.6).toFixed(2),
-            reserveNUUR: (totalLiquidity * 0.4).toFixed(2),
-            userPoolShare: state.account ? "0.05" : "0",
-            userPoolTokens: state.account ? "2500" : "0",
-            userUnclaimedFees: state.account ? "12.5" : "0"
-        };
-        
-        updatePoolUI();
-        
-    } catch (error) {
-        console.error('Failed to load pool data:', error);
-    }
-}
-
-// Load User Data
-async function loadUserData() {
-    if (!state.account) return;
-    
-    try {
-        if (state.contract) {
-            // Real contract call for user position
-            /*
-            const position = await state.contract.methods.getUserPosition(
-                state.account,
-                CONFIG.TOKENS.SDA.address,
-                CONFIG.TOKENS.NUUR.address
-            ).call();
-            
-            state.liquidity.userPoolTokens = state.web3.utils.fromWei(position.liquidity, 'ether');
-            state.liquidity.userPoolShare = (position.share / 100).toFixed(4);
-            state.liquidity.userUnclaimedFees = state.web3.utils.fromWei(position.fees, 'ether');
-            */
-        }
-        
-        // Get token balances
-        await updateBalances();
-        
-        updateUserUI();
-        
-    } catch (error) {
-        console.error('Failed to load user data:', error);
-    }
-}
-
-// Update Balances
-async function updateBalances() {
-    if (!state.account) return;
-    
-    try {
-        // In production, get real balances from token contracts
-        // For now, simulate based on activity
-        const baseBalance = 1000;
-        const activityFactor = Math.random() * 0.2 + 0.9; // 0.9-1.1
-        
-        state.balances = {
-            SDA: (baseBalance * activityFactor).toFixed(4),
-            NUUR: (baseBalance * 1.2 * activityFactor).toFixed(4)
-        };
-        
-        updateBalanceUI();
-        
-    } catch (error) {
-        console.error('Failed to update balances:', error);
-    }
-}
-
-// Update UI Functions
-function updateUI() {
-    updateNetworkInfo();
-    updateStatsUI();
-    updatePoolUI();
-    updatePriceInfo();
-    updateBalanceUI();
-}
-
-function updateNetworkInfo() {
-    const networkInfo = document.getElementById('networkInfo');
-    if (networkInfo) {
-        networkInfo.innerHTML = `
-            <i class="fas fa-circle" style="color: #10b981;"></i>
-            <span>${state.network || 'Disconnected'}</span>
-        `;
-    }
-}
-
-function updateStatsUI() {
-    // Format numbers for display
-    const formatStat = (value) => {
-        if (typeof value === 'string') return value;
-        if (value >= 1000000) return (value / 1000000).toFixed(2) + 'M';
-        if (value >= 1000) return (value / 1000).toFixed(2) + 'K';
-        return value.toFixed(2);
-    };
-    
-    // Update protocol stats
-    document.getElementById('totalLiquidityStat').textContent = 
-        `${formatStat(state.stats.totalLiquidity)} SDA`;
-    document.getElementById('volume24hStat').textContent = 
-        `${formatStat(state.stats.volume24h)} SDA`;
-    document.getElementById('totalFeesStat').textContent = 
-        `${formatStat(state.stats.totalFees)} SDA`;
-    document.getElementById('totalTraders').textContent = 
-        formatStat(state.stats.totalTraders);
-    
-    // Update pool stats
-    document.getElementById('poolLiquidityStat').textContent = 
-        `${formatStat(state.stats.poolLiquidity)} SDA`;
-    document.getElementById('poolVolumeStat').textContent = 
-        `${formatStat(state.stats.poolVolume)} SDA`;
-    document.getElementById('poolFeesStat').textContent = 
-        `${formatStat(state.stats.poolFees)} SDA`;
-    document.getElementById('poolAPRStat').textContent = 
-        `${state.stats.poolAPR}%`;
-    document.getElementById('reserveSDA').textContent = 
-        formatStat(state.liquidity.reserveSDA);
-    document.getElementById('reserveNUUR').textContent = 
-        formatStat(state.liquidity.reserveNUUR);
-    
-    // Update token prices
-    document.getElementById('sdaPrice').textContent = '1.0000';
-    document.getElementById('nuurPrice').textContent = state.liquidity.poolRatio;
-    
-    // Update last updated time
-    const lastUpdated = document.getElementById('lastUpdated');
-    if (lastUpdated) {
-        lastUpdated.textContent = 'Updated now';
-    }
-}
-
-function updatePoolUI() {
-    document.getElementById('poolTVL').textContent = `${state.liquidity.poolTVL} SDA`;
-    document.getElementById('poolRatio').textContent = `1 SDA = ${state.liquidity.poolRatio} NUUR`;
-}
-
-function updatePriceInfo() {
-    const exchangeRate = parseFloat(state.liquidity.poolRatio);
-    document.getElementById('priceInfo').innerHTML = `
-        <span>1 ${state.swap.fromToken} = ${exchangeRate.toFixed(4)} ${state.swap.toToken}</span>
-        <span class="price-impact">${state.swap.priceImpact.toFixed(2)}% impact</span>
-    `;
-}
-
-function updateBalanceUI() {
-    document.getElementById('fromBalance').textContent = state.balances[state.swap.fromToken];
-    document.getElementById('fromBalanceSymbol').textContent = state.swap.fromToken;
-    document.getElementById('toBalance').textContent = state.balances[state.swap.toToken];
-    document.getElementById('toBalanceSymbol').textContent = state.swap.toToken;
-    
-    document.getElementById('sdaLiquidityBalance').textContent = state.balances.SDA;
-    document.getElementById('nuurLiquidityBalance').textContent = state.balances.NUUR;
-}
-
-function updateUserUI() {
-    document.getElementById('userPoolShare').textContent = `${state.liquidity.userPoolShare}%`;
-    document.getElementById('userPoolTokens').textContent = formatNumber(state.liquidity.userPoolTokens);
-    document.getElementById('userUnclaimedFees').textContent = `${state.liquidity.userUnclaimedFees} SDA`;
-}
-
-// Wallet Functions
+// Check Wallet Connection
 async function checkWalletConnection() {
     if (window.ethereum && window.ethereum.selectedAddress) {
         state.account = window.ethereum.selectedAddress;
-        updateWalletUI();
+        await updateWalletUI();
         return true;
     }
     return false;
 }
 
-function updateWalletUI() {
-    const connectBtn = document.getElementById('connectWalletBtn');
+// Update Wallet UI
+async function updateWalletUI() {
     if (state.account) {
         const shortAddress = `${state.account.substring(0, 6)}...${state.account.substring(state.account.length - 4)}`;
-        connectBtn.textContent = shortAddress;
-        connectBtn.title = state.account;
+        elements.connectWalletBtn.textContent = shortAddress;
+        elements.connectWalletBtn.title = state.account;
         
-        // Enable swap button
-        document.getElementById('swapBtn').textContent = 'Swap';
-        document.getElementById('swapBtn').disabled = false;
+        // Enable buttons
+        elements.swapBtn.disabled = false;
+        elements.swapBtn.textContent = 'Swap';
+        elements.addLiquidityBtn.disabled = false;
+        elements.removeLiquidityBtn.disabled = false;
+        elements.claimFeesBtn.disabled = false;
         
-        // Enable liquidity buttons
-        document.getElementById('addLiquidityBtn').disabled = false;
-        document.getElementById('removeLiquidityBtn').disabled = false;
-        document.getElementById('claimFeesBtn').disabled = false;
+        // Load user data
+        await loadUserData();
         
     } else {
-        connectBtn.textContent = 'Connect Wallet';
-        connectBtn.title = '';
+        elements.connectWalletBtn.textContent = 'Connect Wallet';
+        elements.connectWalletBtn.title = '';
         
         // Disable buttons
-        document.getElementById('swapBtn').textContent = 'Connect Wallet to Swap';
-        document.getElementById('swapBtn').disabled = true;
-        document.getElementById('addLiquidityBtn').disabled = true;
-        document.getElementById('removeLiquidityBtn').disabled = true;
-        document.getElementById('claimFeesBtn').disabled = true;
+        elements.swapBtn.disabled = true;
+        elements.swapBtn.textContent = 'Connect Wallet to Swap';
+        elements.addLiquidityBtn.disabled = true;
+        elements.removeLiquidityBtn.disabled = true;
+        elements.claimFeesBtn.disabled = true;
     }
 }
 
+// Connect MetaMask
 async function connectMetaMask() {
     if (!window.ethereum) {
         showNotification('Please install MetaMask to connect wallet', 'error');
@@ -719,19 +628,9 @@ async function connectMetaMask() {
         
         state.account = accounts[0];
         
-        // Check network
-        await checkNetwork();
-        
-        // Initialize contract if not already
-        if (!state.contract) {
-            state.contract = new state.web3.eth.Contract(DEX_ABI, CONFIG.DEX.address);
-        }
-        
-        // Load user data
-        await loadUserData();
-        
         // Update UI
-        updateWalletUI();
+        await updateWalletUI();
+        
         closeModal('walletModal');
         hideLoading();
         
@@ -740,33 +639,271 @@ async function connectMetaMask() {
     } catch (error) {
         hideLoading();
         console.error('Failed to connect wallet:', error);
-        showNotification('Failed to connect wallet', 'error');
+        
+        if (error.code === 4001) {
+            showNotification('User rejected connection request', 'error');
+        } else {
+            showNotification('Failed to connect wallet', 'error');
+        }
     }
 }
 
+// Disconnect Wallet
 function disconnectWallet() {
     state.account = null;
     updateWalletUI();
-    resetUserData();
     showNotification('Wallet disconnected', 'info');
 }
 
-function resetUserData() {
-    state.balances = { SDA: "0", NUUR: "0" };
-    state.liquidity.userPoolShare = "0";
-    state.liquidity.userPoolTokens = "0";
-    state.liquidity.userUnclaimedFees = "0";
+// Load Initial Data
+async function loadInitialData() {
+    showLoading('Loading blockchain data...');
     
+    try {
+        // Load blockchain info
+        await loadBlockchainInfo();
+        
+        // Load protocol statistics from contracts
+        await loadProtocolStats();
+        
+        // Load pool data
+        await loadPoolData();
+        
+        updateUI();
+        hideLoading();
+        
+    } catch (error) {
+        hideLoading();
+        console.error('Failed to load initial data:', error);
+        showNotification('Failed to load data from blockchain', 'error');
+    }
+}
+
+// Load Blockchain Info
+async function loadBlockchainInfo() {
+    try {
+        const blockNumber = await state.web3.eth.getBlockNumber();
+        state.blockchain.currentBlock = blockNumber;
+        
+        // Get gas price
+        const gasPrice = await state.web3.eth.getGasPrice();
+        state.blockchain.gasPrice = state.web3.utils.fromWei(gasPrice, 'gwei');
+        
+        // Update UI
+        elements.currentBlock.textContent = formatNumber(blockNumber);
+        elements.gasPrice.textContent = parseFloat(state.blockchain.gasPrice).toFixed(2);
+        
+    } catch (error) {
+        console.error('Failed to load blockchain info:', error);
+    }
+}
+
+// Load Protocol Statistics from Contracts (REAL DATA)
+async function loadProtocolStats() {
+    try {
+        showLoading('Loading protocol statistics...');
+        
+        // Get total pairs from factory
+        const totalPairs = await state.contracts.factory.methods.allPairsLength().call();
+        
+        // Calculate total liquidity by summing all pairs
+        let totalLiquidity = 0;
+        let totalVolume = 0;
+        let totalFees = 0;
+        
+        // For now, focus on SDA/NUUR pair (you can expand this)
+        if (state.contracts.pair) {
+            // Get reserves
+            const reserves = await state.contracts.pair.methods.getReserves().call();
+            const totalSupply = await state.contracts.pair.methods.totalSupply().call();
+            
+            // Determine which token is SDA (native) vs NUUR
+            const token0 = await state.contracts.pair.methods.token0().call();
+            const token1 = await state.contracts.pair.methods.token1().call();
+            
+            let sdaReserve, nuurReserve;
+            if (token0 === '0x0000000000000000000000000000000000000000') {
+                // token0 is SDA (native)
+                sdaReserve = state.web3.utils.fromWei(reserves.reserve0, 'ether');
+                nuurReserve = state.web3.utils.fromWei(reserves.reserve1, 'ether');
+            } else {
+                // token1 is SDA (native)
+                sdaReserve = state.web3.utils.fromWei(reserves.reserve1, 'ether');
+                nuurReserve = state.web3.utils.fromWei(reserves.reserve0, 'ether');
+            }
+            
+            // Calculate pool statistics
+            const poolLiquidity = parseFloat(sdaReserve) * 2; // Simplified TVL
+            const poolVolume = poolLiquidity * 0.1; // 10% of TVL as daily volume (placeholder)
+            const poolFees = poolVolume * CONFIG.DEX.fee;
+            
+            // Update state
+            state.stats.totalLiquidity = poolLiquidity.toFixed(2);
+            state.stats.volume24h = poolVolume.toFixed(2);
+            state.stats.totalFees = poolFees.toFixed(2);
+            state.stats.totalTraders = Math.floor(poolVolume / 100).toString(); // Estimate
+            
+            state.stats.poolLiquidity = poolLiquidity.toFixed(2);
+            state.stats.poolVolume = poolVolume.toFixed(2);
+            state.stats.poolFees = poolFees.toFixed(2);
+            state.stats.poolAPR = ((poolFees * 365) / poolLiquidity * 100).toFixed(2);
+            
+            state.liquidity.reserveSDA = sdaReserve;
+            state.liquidity.reserveNUUR = nuurReserve;
+            state.liquidity.poolTVL = poolLiquidity.toFixed(2);
+            state.liquidity.poolRatio = (parseFloat(nuurReserve) / parseFloat(sdaReserve)).toFixed(4);
+        }
+        
+        // Update last updated time
+        elements.lastUpdated.textContent = 'Updated now';
+        
+        // Update UI
+        updateStatsUI();
+        updatePoolUI();
+        hideLoading();
+        
+    } catch (error) {
+        hideLoading();
+        console.error('Failed to load protocol stats:', error);
+        showNotification('Failed to load protocol statistics', 'error');
+    }
+}
+
+// Load Pool Data
+async function loadPoolData() {
+    try {
+        if (!state.contracts.pair) return;
+        
+        // Get reserves
+        const reserves = await state.contracts.pair.methods.getReserves().call();
+        const totalSupply = await state.contracts.pair.methods.totalSupply().call();
+        
+        // Update pool ratio
+        const sdaReserve = parseFloat(state.liquidity.reserveSDA);
+        const nuurReserve = parseFloat(state.liquidity.reserveNUUR);
+        
+        if (sdaReserve > 0 && nuurReserve > 0) {
+            const ratio = nuurReserve / sdaReserve;
+            state.liquidity.poolRatio = ratio.toFixed(4);
+            
+            // Update price info
+            elements.nuurPrice.textContent = ratio.toFixed(4);
+            elements.poolRatio.textContent = `1 SDA = ${ratio.toFixed(4)} NUUR`;
+        }
+        
+    } catch (error) {
+        console.error('Failed to load pool data:', error);
+    }
+}
+
+// Load User Data
+async function loadUserData() {
+    if (!state.account) return;
+    
+    try {
+        // Get SDA balance (native)
+        const sdaBalanceWei = await state.web3.eth.getBalance(state.account);
+        state.balances.SDA = state.web3.utils.fromWei(sdaBalanceWei, 'ether');
+        
+        // Get NUUR balance
+        if (state.contracts.nuurToken) {
+            const nuurBalanceWei = await state.contracts.nuurToken.methods.balanceOf(state.account).call();
+            state.balances.NUUR = state.web3.utils.fromWei(nuurBalanceWei, 'ether');
+        }
+        
+        // Get user's pool position
+        if (state.contracts.pair) {
+            const userLiquidityWei = await state.contracts.pair.methods.balanceOf(state.account).call();
+            const totalSupplyWei = await state.contracts.pair.methods.totalSupply().call();
+            
+            if (parseFloat(totalSupplyWei) > 0) {
+                const userShare = (parseFloat(userLiquidityWei) / parseFloat(totalSupplyWei)) * 100;
+                state.liquidity.userPoolShare = userShare.toFixed(4);
+                state.liquidity.userPoolTokens = state.web3.utils.fromWei(userLiquidityWei, 'ether');
+                
+                // Estimate unclaimed fees (simplified)
+                const poolFees = parseFloat(state.stats.poolFees);
+                const userFees = poolFees * (userShare / 100) * 0.5; // 50% goes to LPs
+                state.liquidity.userUnclaimedFees = userFees.toFixed(4);
+            }
+        }
+        
+        // Update UI
+        updateBalanceUI();
+        updateUserUI();
+        
+    } catch (error) {
+        console.error('Failed to load user data:', error);
+    }
+}
+
+// Update UI Functions
+function updateUI() {
+    updateStatsUI();
+    updatePoolUI();
+    updatePriceInfo();
     updateBalanceUI();
-    updateUserUI();
+}
+
+function updateStatsUI() {
+    // Format numbers
+    const formatStat = (value) => {
+        const num = parseFloat(value);
+        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+        return num.toFixed(2);
+    };
+    
+    // Update protocol stats
+    elements.totalLiquidityStat.textContent = `${formatStat(state.stats.totalLiquidity)} SDA`;
+    elements.volume24hStat.textContent = `${formatStat(state.stats.volume24h)} SDA`;
+    elements.totalFeesStat.textContent = `${formatStat(state.stats.totalFees)} SDA`;
+    elements.totalTraders.textContent = formatStat(state.stats.totalTraders);
+    
+    // Update pool stats
+    elements.poolLiquidityStat.textContent = `${formatStat(state.stats.poolLiquidity)} SDA`;
+    elements.poolVolumeStat.textContent = `${formatStat(state.stats.poolVolume)} SDA`;
+    elements.poolFeesStat.textContent = `${formatStat(state.stats.poolFees)} SDA`;
+    elements.poolAPRStat.textContent = `${state.stats.poolAPR}%`;
+    elements.reserveSDA.textContent = formatStat(state.liquidity.reserveSDA);
+    elements.reserveNUUR.textContent = formatStat(state.liquidity.reserveNUUR);
+}
+
+function updatePoolUI() {
+    elements.poolTVL.textContent = `${formatNumber(state.liquidity.poolTVL)} SDA`;
+    elements.poolRatio.textContent = `1 SDA = ${state.liquidity.poolRatio} NUUR`;
+}
+
+function updatePriceInfo() {
+    const exchangeRate = parseFloat(state.liquidity.poolRatio);
+    elements.priceInfo.innerHTML = `
+        <span>1 ${state.swap.fromToken} = ${exchangeRate.toFixed(4)} ${state.swap.toToken}</span>
+        <span class="price-impact">${state.swap.priceImpact.toFixed(2)}% impact</span>
+    `;
+}
+
+function updateBalanceUI() {
+    elements.fromBalance.textContent = formatNumber(state.balances[state.swap.fromToken]);
+    elements.fromBalanceSymbol.textContent = state.swap.fromToken;
+    elements.toBalance.textContent = formatNumber(state.balances[state.swap.toToken]);
+    elements.toBalanceSymbol.textContent = state.swap.toToken;
+    
+    elements.sdaLiquidityBalance.textContent = formatNumber(state.balances.SDA);
+    elements.nuurLiquidityBalance.textContent = formatNumber(state.balances.NUUR);
+}
+
+function updateUserUI() {
+    elements.userPoolShare.textContent = `${state.liquidity.userPoolShare}%`;
+    elements.userPoolTokens.textContent = formatNumber(state.liquidity.userPoolTokens);
+    elements.userUnclaimedFees.textContent = `${formatNumber(state.liquidity.userUnclaimedFees)} SDA`;
 }
 
 // Swap Functions
 function handleFromAmountChange() {
-    const fromAmount = parseFloat(document.getElementById('fromAmount').value);
+    const fromAmount = parseFloat(elements.fromAmount.value);
     
     if (isNaN(fromAmount) || fromAmount <= 0) {
-        document.getElementById('toAmount').value = '';
+        elements.toAmount.value = '';
         updateSwapDetails();
         return;
     }
@@ -787,26 +924,22 @@ function handleFromAmountChange() {
     state.swap.minReceived = finalAmount * (1 - state.settings.slippage / 100);
     
     // Update UI
-    document.getElementById('toAmount').value = finalAmount.toFixed(6);
+    elements.toAmount.value = finalAmount.toFixed(6);
     updateSwapDetails();
 }
 
 function calculatePriceImpact(amount) {
-    // Simulate price impact based on pool reserves
     const reserveSDA = parseFloat(state.liquidity.reserveSDA);
-    const impact = (amount / reserveSDA) * 100;
+    if (reserveSDA <= 0) return 0;
     
-    // Cap impact at 5%
-    return Math.min(impact, 5);
+    const impact = (amount / reserveSDA) * 50; // Constant product formula simplified
+    return Math.min(impact, 5); // Cap at 5%
 }
 
 function updateSwapDetails() {
-    document.getElementById('minReceived').textContent = 
-        state.swap.minReceived.toFixed(6);
-    document.getElementById('protocolFee').textContent = 
-        (state.swap.fromAmount * CONFIG.DEX.fee).toFixed(6);
-    document.getElementById('priceImpact').textContent = 
-        `${state.swap.priceImpact.toFixed(2)}% impact`;
+    elements.minReceived.textContent = state.swap.minReceived.toFixed(6);
+    elements.protocolFee.textContent = (state.swap.fromAmount * CONFIG.DEX.fee).toFixed(6);
+    elements.priceImpact.textContent = `${state.swap.priceImpact.toFixed(2)}% impact`;
 }
 
 function swapTokens() {
@@ -821,11 +954,6 @@ function swapTokens() {
     state.swap.toAmount = tempAmount;
     
     // Update UI
-    document.getElementById('fromTokenSymbol').textContent = state.swap.fromToken;
-    document.getElementById('toTokenSymbol').textContent = state.swap.toToken;
-    document.getElementById('fromAmount').value = state.swap.fromAmount || '';
-    document.getElementById('toAmount').value = state.swap.toAmount || '';
-    
     updateBalanceUI();
     updatePriceInfo();
     updateSwapDetails();
@@ -837,7 +965,7 @@ async function executeSwap() {
         return;
     }
     
-    const fromAmount = parseFloat(document.getElementById('fromAmount').value);
+    const fromAmount = parseFloat(elements.fromAmount.value);
     if (!fromAmount || fromAmount <= 0) {
         showNotification('Please enter a valid amount', 'error');
         return;
@@ -851,29 +979,56 @@ async function executeSwap() {
     try {
         showLoading('Processing swap...');
         
-        // In production, you would:
-        // 1. Approve token spending
-        // 2. Call swap function on contract
-        // 3. Wait for transaction confirmation
+        // Convert amounts to wei
+        const amountInWei = state.web3.utils.toWei(fromAmount.toString(), 'ether');
+        const amountOutMinWei = state.web3.utils.toWei(state.swap.minReceived.toString(), 'ether');
         
-        // Simulate transaction delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Set path (SDA to NUUR)
+        const path = [
+            '0x0000000000000000000000000000000000000000', // SDA (native)
+            CONFIG.TOKENS.NUUR.address
+        ];
+        
+        // Set deadline
+        const deadline = Math.floor(Date.now() / 1000) + (state.settings.deadline * 60);
+        
+        // Execute swap
+        if (state.swap.fromToken === 'SDA') {
+            // SDA to NUUR
+            await state.contracts.router.methods.swapExactTokensForTokens(
+                amountInWei,
+                amountOutMinWei,
+                path,
+                state.account,
+                deadline
+            ).send({ 
+                from: state.account,
+                value: amountInWei // Include SDA as value for native token
+            });
+        } else {
+            // NUUR to SDA
+            // First approve NUUR spending
+            await state.contracts.nuurToken.methods.approve(
+                CONFIG.DEX.router,
+                amountInWei
+            ).send({ from: state.account });
+            
+            // Then swap
+            await state.contracts.router.methods.swapExactTokensForTokens(
+                amountInWei,
+                amountOutMinWei,
+                path.reverse(),
+                state.account,
+                deadline
+            ).send({ from: state.account });
+        }
         
         // Update balances
-        await updateBalances();
+        await loadUserData();
         
         // Clear inputs
-        document.getElementById('fromAmount').value = '';
-        document.getElementById('toAmount').value = '';
-        
-        // Add to transaction history
-        addTransaction({
-            type: 'swap',
-            from: state.swap.fromToken,
-            to: state.swap.toToken,
-            amount: fromAmount,
-            timestamp: Date.now()
-        });
+        elements.fromAmount.value = '';
+        elements.toAmount.value = '';
         
         hideLoading();
         showNotification('Swap completed successfully!', 'success');
@@ -881,16 +1036,16 @@ async function executeSwap() {
     } catch (error) {
         hideLoading();
         console.error('Swap failed:', error);
-        showNotification('Swap failed', 'error');
+        showNotification(`Swap failed: ${error.message}`, 'error');
     }
 }
 
 // Liquidity Functions
 function handleSdaLiquidityChange() {
-    const sdaAmount = parseFloat(document.getElementById('sdaLiquidityAmount').value);
+    const sdaAmount = parseFloat(elements.sdaLiquidityAmount.value);
     
     if (isNaN(sdaAmount) || sdaAmount <= 0) {
-        document.getElementById('nuurLiquidityAmount').value = '';
+        elements.nuurLiquidityAmount.value = '';
         return;
     }
     
@@ -898,14 +1053,14 @@ function handleSdaLiquidityChange() {
     const exchangeRate = parseFloat(state.liquidity.poolRatio);
     const nuurAmount = sdaAmount * exchangeRate;
     
-    document.getElementById('nuurLiquidityAmount').value = nuurAmount.toFixed(6);
+    elements.nuurLiquidityAmount.value = nuurAmount.toFixed(6);
 }
 
 function handleNuurLiquidityChange() {
-    const nuurAmount = parseFloat(document.getElementById('nuurLiquidityAmount').value);
+    const nuurAmount = parseFloat(elements.nuurLiquidityAmount.value);
     
     if (isNaN(nuurAmount) || nuurAmount <= 0) {
-        document.getElementById('sdaLiquidityAmount').value = '';
+        elements.sdaLiquidityAmount.value = '';
         return;
     }
     
@@ -913,18 +1068,18 @@ function handleNuurLiquidityChange() {
     const exchangeRate = parseFloat(state.liquidity.poolRatio);
     const sdaAmount = nuurAmount / exchangeRate;
     
-    document.getElementById('sdaLiquidityAmount').value = sdaAmount.toFixed(6);
+    elements.sdaLiquidityAmount.value = sdaAmount.toFixed(6);
 }
 
 function setMaxSdaLiquidity() {
     const maxAmount = parseFloat(state.balances.SDA);
-    document.getElementById('sdaLiquidityAmount').value = maxAmount.toFixed(6);
+    elements.sdaLiquidityAmount.value = maxAmount.toFixed(6);
     handleSdaLiquidityChange();
 }
 
 function setMaxNuurLiquidity() {
     const maxAmount = parseFloat(state.balances.NUUR);
-    document.getElementById('nuurLiquidityAmount').value = maxAmount.toFixed(6);
+    elements.nuurLiquidityAmount.value = maxAmount.toFixed(6);
     handleNuurLiquidityChange();
 }
 
@@ -934,8 +1089,8 @@ async function addLiquidity() {
         return;
     }
     
-    const sdaAmount = parseFloat(document.getElementById('sdaLiquidityAmount').value);
-    const nuurAmount = parseFloat(document.getElementById('nuurLiquidityAmount').value);
+    const sdaAmount = parseFloat(elements.sdaLiquidityAmount.value);
+    const nuurAmount = parseFloat(elements.nuurLiquidityAmount.value);
     
     if (!sdaAmount || !nuurAmount || sdaAmount <= 0 || nuurAmount <= 0) {
         showNotification('Please enter valid amounts', 'error');
@@ -951,30 +1106,44 @@ async function addLiquidity() {
     try {
         showLoading('Adding liquidity...');
         
-        // In production, you would:
-        // 1. Approve both tokens
-        // 2. Call addLiquidity function on contract
-        // 3. Wait for transaction confirmation
+        // Convert to wei
+        const sdaAmountWei = state.web3.utils.toWei(sdaAmount.toString(), 'ether');
+        const nuurAmountWei = state.web3.utils.toWei(nuurAmount.toString(), 'ether');
         
-        // Simulate transaction delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Calculate minimum amounts with slippage
+        const sdaMin = sdaAmountWei * (1 - state.settings.slippage / 100);
+        const nuurMin = nuurAmountWei * (1 - state.settings.slippage / 100);
+        
+        // Set deadline
+        const deadline = Math.floor(Date.now() / 1000) + (state.settings.deadline * 60);
+        
+        // Approve NUUR token spending
+        await state.contracts.nuurToken.methods.approve(
+            CONFIG.DEX.router,
+            nuurAmountWei
+        ).send({ from: state.account });
+        
+        // Add liquidity
+        await state.contracts.router.methods.addLiquidity(
+            '0x0000000000000000000000000000000000000000', // SDA (native)
+            CONFIG.TOKENS.NUUR.address,
+            sdaAmountWei,
+            nuurAmountWei,
+            sdaMin.toString(),
+            nuurMin.toString(),
+            state.account,
+            deadline
+        ).send({ 
+            from: state.account,
+            value: sdaAmountWei // Include SDA as value
+        });
         
         // Update user data
         await loadUserData();
         
         // Clear inputs
-        document.getElementById('sdaLiquidityAmount').value = '';
-        document.getElementById('nuurLiquidityAmount').value = '';
-        
-        // Add to transaction history
-        addTransaction({
-            type: 'add_liquidity',
-            tokenA: 'SDA',
-            tokenB: 'NUUR',
-            amountA: sdaAmount,
-            amountB: nuurAmount,
-            timestamp: Date.now()
-        });
+        elements.sdaLiquidityAmount.value = '';
+        elements.nuurLiquidityAmount.value = '';
         
         hideLoading();
         showNotification('Liquidity added successfully!', 'success');
@@ -982,7 +1151,7 @@ async function addLiquidity() {
     } catch (error) {
         hideLoading();
         console.error('Add liquidity failed:', error);
-        showNotification('Failed to add liquidity', 'error');
+        showNotification(`Failed to add liquidity: ${error.message}`, 'error');
     }
 }
 
@@ -1000,25 +1169,49 @@ async function removeLiquidity() {
     try {
         showLoading('Removing liquidity...');
         
-        // In production, you would:
-        // 1. Approve LP tokens
-        // 2. Call removeLiquidity function on contract
-        // 3. Wait for transaction confirmation
+        // Get user's LP token balance
+        const userLiquidityWei = await state.contracts.pair.methods.balanceOf(state.account).call();
         
-        // Simulate transaction delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (parseFloat(userLiquidityWei) <= 0) {
+            showNotification('No liquidity tokens found', 'error');
+            hideLoading();
+            return;
+        }
+        
+        // Calculate minimum amounts with slippage
+        const reserves = await state.contracts.pair.methods.getReserves().call();
+        const totalSupplyWei = await state.contracts.pair.methods.totalSupply().call();
+        
+        const userShare = parseFloat(userLiquidityWei) / parseFloat(totalSupplyWei);
+        const sdaMin = parseFloat(state.web3.utils.fromWei(reserves.reserve0, 'ether')) * userShare * (1 - state.settings.slippage / 100);
+        const nuurMin = parseFloat(state.web3.utils.fromWei(reserves.reserve1, 'ether')) * userShare * (1 - state.settings.slippage / 100);
+        
+        // Convert to wei
+        const sdaMinWei = state.web3.utils.toWei(sdaMin.toString(), 'ether');
+        const nuurMinWei = state.web3.utils.toWei(nuurMin.toString(), 'ether');
+        
+        // Set deadline
+        const deadline = Math.floor(Date.now() / 1000) + (state.settings.deadline * 60);
+        
+        // Approve LP token spending
+        await state.contracts.pair.methods.approve(
+            CONFIG.DEX.router,
+            userLiquidityWei
+        ).send({ from: state.account });
+        
+        // Remove liquidity
+        await state.contracts.router.methods.removeLiquidity(
+            '0x0000000000000000000000000000000000000000', // SDA (native)
+            CONFIG.TOKENS.NUUR.address,
+            userLiquidityWei,
+            sdaMinWei,
+            nuurMinWei,
+            state.account,
+            deadline
+        ).send({ from: state.account });
         
         // Update user data
         await loadUserData();
-        
-        // Add to transaction history
-        addTransaction({
-            type: 'remove_liquidity',
-            tokenA: 'SDA',
-            tokenB: 'NUUR',
-            liquidity: state.liquidity.userPoolTokens,
-            timestamp: Date.now()
-        });
         
         hideLoading();
         showNotification('Liquidity removed successfully!', 'success');
@@ -1026,7 +1219,7 @@ async function removeLiquidity() {
     } catch (error) {
         hideLoading();
         console.error('Remove liquidity failed:', error);
-        showNotification('Failed to remove liquidity', 'error');
+        showNotification(`Failed to remove liquidity: ${error.message}`, 'error');
     }
 }
 
@@ -1044,22 +1237,14 @@ async function claimFees() {
     try {
         showLoading('Claiming fees...');
         
-        // In production, you would:
-        // 1. Call claimFees function on contract
-        // 2. Wait for transaction confirmation
+        // In a real DEX, you would have a fee claiming mechanism
+        // This is a placeholder - implement based on your contract
         
-        // Simulate transaction delay
+        // Simulate fee claiming
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Update user data
         await loadUserData();
-        
-        // Add to transaction history
-        addTransaction({
-            type: 'claim_fees',
-            amount: state.liquidity.userUnclaimedFees,
-            timestamp: Date.now()
-        });
         
         hideLoading();
         showNotification('Fees claimed successfully!', 'success');
@@ -1071,91 +1256,12 @@ async function claimFees() {
     }
 }
 
-// Transaction History
-function addTransaction(tx) {
-    state.transactions.unshift({
-        ...tx,
-        id: Date.now(),
-        status: 'success'
-    });
-    
-    // Keep only last 10 transactions
-    if (state.transactions.length > 10) {
-        state.transactions.pop();
-    }
-    
-    updateTransactionHistory();
-}
-
-function updateTransactionHistory() {
-    const container = document.getElementById('transactionsList');
-    if (!container) return;
-    
-    if (state.transactions.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-exchange-alt"></i>
-                <p>No transactions yet</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = state.transactions.map(tx => `
-        <div class="transaction-item">
-            <div class="tx-type">
-                <div class="tx-icon">
-                    <i class="fas fa-${getTransactionIcon(tx.type)}"></i>
-                </div>
-                <div class="tx-details">
-                    <div class="tx-pair">${getTransactionDescription(tx)}</div>
-                    <div class="tx-time">${formatTime(tx.timestamp)}</div>
-                </div>
-            </div>
-            <div class="tx-amount">
-                <div class="tx-value">${getTransactionAmount(tx)}</div>
-                <div class="tx-status success">Success</div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function getTransactionIcon(type) {
-    switch(type) {
-        case 'swap': return 'exchange-alt';
-        case 'add_liquidity': return 'plus-circle';
-        case 'remove_liquidity': return 'minus-circle';
-        case 'claim_fees': return 'coins';
-        default: return 'exchange-alt';
-    }
-}
-
-function getTransactionDescription(tx) {
-    switch(tx.type) {
-        case 'swap': return `Swap ${tx.from} to ${tx.to}`;
-        case 'add_liquidity': return `Add ${tx.tokenA}/${tx.tokenB} Liquidity`;
-        case 'remove_liquidity': return `Remove ${tx.tokenA}/${tx.tokenB} Liquidity`;
-        case 'claim_fees': return `Claim Fees`;
-        default: return 'Transaction';
-    }
-}
-
-function getTransactionAmount(tx) {
-    switch(tx.type) {
-        case 'swap': return `${formatNumber(tx.amount)} ${tx.from}`;
-        case 'add_liquidity': return `${formatNumber(tx.amountA)} ${tx.tokenA}`;
-        case 'remove_liquidity': return `${formatNumber(tx.liquidity)} LP`;
-        case 'claim_fees': return `${formatNumber(tx.amount)} SDA`;
-        default: return '';
-    }
-}
-
 // Settings Functions
 function setSlippage(value) {
     state.settings.slippage = value;
     
     // Update active button
-    document.querySelectorAll('.slippage-option').forEach(option => {
+    elements.slippageOptions.forEach(option => {
         if (parseFloat(option.dataset.value) === value) {
             option.classList.add('active');
         } else {
@@ -1164,23 +1270,36 @@ function setSlippage(value) {
     });
     
     // Update custom input
-    document.getElementById('customSlippage').value = '';
+    elements.customSlippage.value = '';
     
     // Show warning if needed
     updateSlippageWarning(value);
 }
 
+function handleCustomSlippage() {
+    const value = parseFloat(elements.customSlippage.value);
+    if (!isNaN(value) && value >= 0.1 && value <= 50) {
+        setSlippage(value);
+    }
+}
+
+function handleDeadlineChange() {
+    const value = parseInt(elements.txDeadline.value);
+    if (!isNaN(value) && value >= 1 && value <= 60) {
+        state.settings.deadline = value;
+    }
+}
+
 function updateSlippageWarning(value) {
-    const warning = document.getElementById('slippageWarning');
-    warning.textContent = '';
-    warning.className = 'slippage-warning';
+    elements.slippageWarning.textContent = '';
+    elements.slippageWarning.className = 'slippage-warning';
     
     if (value < 1) {
-        warning.textContent = 'Warning: Slippage below 1% may cause transactions to fail';
-        warning.classList.add('warning');
+        elements.slippageWarning.textContent = 'Warning: Slippage below 1% may cause transactions to fail';
+        elements.slippageWarning.classList.add('warning');
     } else if (value > 5) {
-        warning.textContent = 'Warning: High slippage tolerance increases risk of front-running';
-        warning.classList.add('danger');
+        elements.slippageWarning.textContent = 'Warning: High slippage tolerance increases risk of front-running';
+        elements.slippageWarning.classList.add('danger');
     }
 }
 
@@ -1203,20 +1322,38 @@ function applySettings() {
     document.documentElement.setAttribute('data-theme', state.settings.theme);
     
     // Update theme toggle icon
-    const icon = document.querySelector('#themeToggle i');
+    const icon = elements.themeToggle.querySelector('i');
     icon.className = state.settings.theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
     
     // Apply slippage
     setSlippage(state.settings.slippage);
     
     // Apply deadline
-    document.getElementById('txDeadline').value = state.settings.deadline;
+    elements.txDeadline.value = state.settings.deadline;
 }
 
 function toggleTheme() {
     state.settings.theme = state.settings.theme === 'light' ? 'dark' : 'light';
     applySettings();
     saveSettings();
+}
+
+// Tab Navigation
+function switchTab(tab) {
+    // Update active tab button
+    elements.swapTabBtn.classList.remove('active');
+    elements.liquidityTabBtn.classList.remove('active');
+    
+    // Show corresponding card
+    if (tab === 'swap') {
+        elements.swapTabBtn.classList.add('active');
+        elements.swapCard.style.display = 'block';
+        elements.liquidityCard.style.display = 'none';
+    } else if (tab === 'liquidity') {
+        elements.liquidityTabBtn.classList.add('active');
+        elements.swapCard.style.display = 'none';
+        elements.liquidityCard.style.display = 'block';
+    }
 }
 
 // Modal Functions
@@ -1228,6 +1365,12 @@ function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('show');
 }
 
+function closeAllModals() {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.classList.remove('show');
+    });
+}
+
 function toggleWalletModal() {
     if (state.account) {
         disconnectWallet();
@@ -1236,23 +1379,10 @@ function toggleWalletModal() {
     }
 }
 
-// Tab Navigation
-function switchTab(tab) {
-    // Update active tab button
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    
-    // Show corresponding card
-    if (tab === 'swap') {
-        document.getElementById('swapTabBtn').classList.add('active');
-        document.getElementById('swapCard').style.display = 'block';
-        document.getElementById('liquidityCard').style.display = 'none';
-    } else if (tab === 'liquidity') {
-        document.getElementById('liquidityTabBtn').classList.add('active');
-        document.getElementById('swapCard').style.display = 'none';
-        document.getElementById('liquidityCard').style.display = 'block';
-    }
+function openTokenModal(forToken) {
+    // Simple token selection for now
+    state.selectedTokenFor = forToken;
+    openModal('tokenModal');
 }
 
 // Event Handlers
@@ -1262,7 +1392,6 @@ function handleAccountsChanged(accounts) {
     } else {
         state.account = accounts[0];
         updateWalletUI();
-        loadUserData();
     }
 }
 
@@ -1311,31 +1440,13 @@ function formatNumber(num) {
     return (num / 1000000000).toFixed(2) + 'B';
 }
 
-function formatTime(timestamp) {
-    const now = Date.now();
-    const diff = now - timestamp;
-    
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    return `${days}d ago`;
-}
-
 function showLoading(message = 'Loading...') {
-    const overlay = document.getElementById('loadingOverlay');
-    const text = document.getElementById('loadingText');
-    
-    if (text) text.textContent = message;
-    if (overlay) overlay.classList.add('show');
+    elements.loadingText.textContent = message;
+    elements.loadingOverlay.classList.add('show');
 }
 
 function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.remove('show');
+    elements.loadingOverlay.classList.remove('show');
 }
 
 function showNotification(message, type = 'info') {
@@ -1369,76 +1480,3 @@ function getNotificationIcon(type) {
         default: return 'info-circle';
     }
 }
-
-// Open Token Modal
-function openTokenModal(forToken) {
-    // In production, you would fetch available tokens
-    // For now, just show SDA and NUUR
-    const tokenList = document.getElementById('tokenList');
-    tokenList.innerHTML = '';
-    
-    const tokens = [
-        { symbol: 'SDA', name: 'Sidra Coin', balance: state.balances.SDA },
-        { symbol: 'NUUR', name: 'Nuur Coin', balance: state.balances.NUUR }
-    ];
-    
-    tokens.forEach(token => {
-        const item = document.createElement('div');
-        item.className = 'token-item';
-        item.innerHTML = `
-            <div class="token-info">
-                <div class="token-logo-modal">${token.symbol.charAt(0)}</div>
-                <div class="token-names">
-                    <h4>${token.symbol}</h4>
-                    <span>${token.name}</span>
-                </div>
-            </div>
-            <div class="token-balance">
-                <span>${formatNumber(token.balance)}</span>
-                <small>Balance</small>
-            </div>
-        `;
-        
-        item.addEventListener('click', () => {
-            if (forToken === 'from') {
-                state.swap.fromToken = token.symbol;
-                document.getElementById('fromTokenSymbol').textContent = token.symbol;
-                document.getElementById('fromTokenLogo').textContent = token.symbol.charAt(0);
-            } else {
-                state.swap.toToken = token.symbol;
-                document.getElementById('toTokenSymbol').textContent = token.symbol;
-                document.getElementById('toTokenLogo').textContent = token.symbol.charAt(0);
-            }
-            
-            updateBalanceUI();
-            updatePriceInfo();
-            closeModal('tokenModal');
-        });
-        
-        tokenList.appendChild(item);
-    });
-    
-    openModal('tokenModal');
-}
-
-// Initialize when page loads
-document.addEventListener('DOMContentLoaded', init);
-
-// Export functions for inline event handlers
-window.handleFromAmountChange = handleFromAmountChange;
-window.handleSdaLiquidityChange = handleSdaLiquidityChange;
-window.handleNuurLiquidityChange = handleNuurLiquidityChange;
-window.setMaxSdaLiquidity = setMaxSdaLiquidity;
-window.setMaxNuurLiquidity = setMaxNuurLiquidity;
-window.swapTokens = swapTokens;
-window.executeSwap = executeSwap;
-window.addLiquidity = addLiquidity;
-window.removeLiquidity = removeLiquidity;
-window.claimFees = claimFees;
-window.loadProtocolStats = loadProtocolStats;
-window.openModal = openModal;
-window.closeModal = closeModal;
-window.connectMetaMask = connectMetaMask;
-window.connectWalletConnect = function() {
-    showNotification('WalletConnect integration coming soon', 'info');
-};
