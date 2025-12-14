@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -23,9 +22,8 @@
                 </div>
                 
                 <div class="nav-links">
-                    <button class="nav-btn" id="swapTabBtn">Swap</button>
+                    <button class="nav-btn active" id="swapTabBtn">Swap</button>
                     <button class="nav-btn" id="liquidityTabBtn">Liquidity</button>
-                    <button class="nav-btn" id="statsTabBtn">Stats</button>
                 </div>
                 
                 <div class="wallet-section">
@@ -34,9 +32,9 @@
                         <span>Sidra Chain</span>
                     </div>
                     
-                    <div class="theme-toggle" id="themeToggle">
+                    <button class="theme-toggle" id="themeToggle">
                         <i class="fas fa-moon"></i>
-                    </div>
+                    </button>
                     
                     <button class="connect-wallet-btn" id="connectWalletBtn">
                         Connect Wallet
@@ -53,11 +51,9 @@
                 <div class="card active-card" id="swapCard">
                     <div class="card-header">
                         <h2>Swap</h2>
-                        <div class="header-actions">
-                            <button class="icon-btn" id="swapSettingsBtn" title="Settings">
-                                <i class="fas fa-cog"></i>
-                            </button>
-                        </div>
+                        <button class="icon-btn" id="swapSettingsBtn" title="Settings">
+                            <i class="fas fa-cog"></i>
+                        </button>
                     </div>
                     
                     <div class="swap-interface">
@@ -73,8 +69,7 @@
                                        id="fromAmount" 
                                        placeholder="0.0" 
                                        min="0" 
-                                       step="any"
-                                       oninput="handleFromAmountChange()">
+                                       step="any">
                                 <div class="token-selector" id="fromTokenSelector">
                                     <div class="token-logo" id="fromTokenLogo">S</div>
                                     <span class="token-symbol" id="fromTokenSymbol">SDA</span>
@@ -85,7 +80,7 @@
                         
                         <!-- Swap Direction Button -->
                         <div class="swap-direction">
-                            <button class="swap-direction-btn" id="swapDirectionBtn" onclick="swapTokens()">
+                            <button class="swap-direction-btn" id="swapDirectionBtn">
                                 <i class="fas fa-arrow-down-arrow-up"></i>
                             </button>
                         </div>
@@ -131,7 +126,7 @@
                         </div>
                         
                         <!-- Swap Button -->
-                        <button class="action-btn primary-btn" id="swapBtn" onclick="executeSwap()">
+                        <button class="action-btn primary-btn" id="swapBtn">
                             Connect Wallet to Swap
                         </button>
                     </div>
@@ -176,9 +171,8 @@
                                                id="sdaLiquidityAmount" 
                                                placeholder="0.0" 
                                                min="0" 
-                                               step="any"
-                                               oninput="handleSdaLiquidityChange()">
-                                        <button class="max-btn" onclick="setMaxSdaLiquidity()">MAX</button>
+                                               step="any">
+                                        <button class="max-btn" id="maxSdaBtn">MAX</button>
                                     </div>
                                 </div>
                                 
@@ -193,9 +187,8 @@
                                                id="nuurLiquidityAmount" 
                                                placeholder="0.0" 
                                                min="0" 
-                                               step="any"
-                                               oninput="handleNuurLiquidityChange()">
-                                        <button class="max-btn" onclick="setMaxNuurLiquidity()">MAX</button>
+                                               step="any">
+                                        <button class="max-btn" id="maxNuurBtn">MAX</button>
                                     </div>
                                 </div>
                             </div>
@@ -205,7 +198,7 @@
                                 <span id="poolRatio">1 SDA = 0.00 NUUR</span>
                             </div>
                             
-                            <button class="action-btn success-btn" id="addLiquidityBtn" onclick="addLiquidity()">
+                            <button class="action-btn success-btn" id="addLiquidityBtn">
                                 Add Liquidity
                             </button>
                         </div>
@@ -229,10 +222,10 @@
                             </div>
                             
                             <div class="position-actions">
-                                <button class="action-btn danger-btn" id="removeLiquidityBtn" onclick="removeLiquidity()">
+                                <button class="action-btn danger-btn" id="removeLiquidityBtn">
                                     Remove Liquidity
                                 </button>
-                                <button class="action-btn secondary-btn" id="claimFeesBtn" onclick="claimFees()">
+                                <button class="action-btn secondary-btn" id="claimFeesBtn">
                                     Claim Fees
                                 </button>
                             </div>
@@ -248,10 +241,10 @@
                     <div class="card-header">
                         <h2>Protocol Statistics</h2>
                         <div class="header-actions">
-                            <button class="icon-btn" id="refreshStatsBtn" onclick="loadProtocolStats()">
+                            <button class="icon-btn" id="refreshStatsBtn">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
-                            <span class="update-time" id="lastUpdated">Updating...</span>
+                            <span class="update-time" id="lastUpdated">Loading...</span>
                         </div>
                     </div>
                     
@@ -263,7 +256,6 @@
                             <div class="stat-content">
                                 <h3 id="totalLiquidityStat">0 SDA</h3>
                                 <p>Total Liquidity</p>
-                                <small class="stat-change" id="liquidityChange">Loading...</small>
                             </div>
                         </div>
                         
@@ -274,7 +266,6 @@
                             <div class="stat-content">
                                 <h3 id="volume24hStat">0 SDA</h3>
                                 <p>24h Volume</p>
-                                <small class="stat-change" id="volumeChange">Loading...</small>
                             </div>
                         </div>
                         
@@ -285,7 +276,6 @@
                             <div class="stat-content">
                                 <h3 id="totalFeesStat">0 SDA</h3>
                                 <p>Total Fees</p>
-                                <small class="stat-change" id="feesChange">Loading...</small>
                             </div>
                         </div>
                         
@@ -296,7 +286,6 @@
                             <div class="stat-content">
                                 <h3 id="totalTraders">0</h3>
                                 <p>Total Traders</p>
-                                <small class="stat-change" id="tradersChange">Loading...</small>
                             </div>
                         </div>
                     </div>
@@ -362,7 +351,7 @@
                     <div class="transactions-list" id="transactionsList">
                         <div class="empty-state">
                             <i class="fas fa-exchange-alt"></i>
-                            <p>Loading transactions...</p>
+                            <p>No transactions yet</p>
                         </div>
                     </div>
                 </div>
@@ -384,7 +373,7 @@
                     <div class="blockchain-info">
                         <div class="info-item">
                             <i class="fas fa-cube"></i>
-                            <span>Current Block: <span id="currentBlock">0</span></span>
+                            <span>Block: <span id="currentBlock">0</span></span>
                         </div>
                         <div class="info-item">
                             <i class="fas fa-gas-pump"></i>
@@ -397,9 +386,8 @@
                     <h3>Links</h3>
                     <div class="footer-links">
                         <a href="#" id="privacyPolicyLink">Privacy Policy</a>
-                        <a href="https://ledger.sidrachain.com" target="_blank">Block Explorer</a>
-                        <a href="#" id="docsLink">Documentation</a>
-                        <a href="#" id="contactLink">Contact</a>
+                        <a href="https://ledger.sidrachain.com" target="_blank">Explorer</a>
+                        <a href="#">Documentation</a>
                     </div>
                 </div>
                 
@@ -411,9 +399,6 @@
                         </a>
                         <a href="https://t.me" target="_blank" class="social-link">
                             <i class="fab fa-telegram"></i>
-                        </a>
-                        <a href="https://github.com" target="_blank" class="social-link">
-                            <i class="fab fa-github"></i>
                         </a>
                     </div>
                 </div>
@@ -431,14 +416,14 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Transaction Settings</h3>
-                <button class="close-modal" onclick="closeModal('settingsModal')">&times;</button>
+                <button class="close-modal" id="closeSettingsBtn">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="setting-group">
                     <h4>Slippage Tolerance</h4>
                     <div class="slippage-options">
-                        <button class="slippage-option active" data-value="1">1%</button>
-                        <button class="slippage-option" data-value="3">3%</button>
+                        <button class="slippage-option" data-value="1">1%</button>
+                        <button class="slippage-option active" data-value="3">3%</button>
                         <button class="slippage-option" data-value="5">5%</button>
                         <div class="custom-slippage">
                             <input type="number" 
@@ -466,7 +451,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="action-btn primary-btn" onclick="saveSettings()">Save Settings</button>
+                <button class="action-btn primary-btn" id="saveSettingsBtn">Save Settings</button>
             </div>
         </div>
     </div>
@@ -476,7 +461,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Select Token</h3>
-                <button class="close-modal" onclick="closeModal('tokenModal')">&times;</button>
+                <button class="close-modal" id="closeTokenBtn">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="token-search">
@@ -496,27 +481,17 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Connect Wallet</h3>
-                <button class="close-modal" onclick="closeModal('walletModal')">&times;</button>
+                <button class="close-modal" id="closeWalletBtn">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="wallet-options">
-                    <button class="wallet-option" onclick="connectMetaMask()">
+                    <button class="wallet-option" id="metamaskBtn">
                         <div class="wallet-icon">
                             <i class="fab fa-ethereum"></i>
                         </div>
                         <div>
                             <h4>MetaMask</h4>
                             <p>Connect using MetaMask</p>
-                        </div>
-                    </button>
-                    
-                    <button class="wallet-option" onclick="connectWalletConnect()">
-                        <div class="wallet-icon">
-                            <i class="fas fa-wallet"></i>
-                        </div>
-                        <div>
-                            <h4>WalletConnect</h4>
-                            <p>Scan QR code</p>
                         </div>
                     </button>
                 </div>
@@ -527,7 +502,7 @@
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-spinner"></div>
-        <p id="loadingText">Processing Transaction...</p>
+        <p id="loadingText">Processing...</p>
     </div>
 
     <!-- Notification Container -->
